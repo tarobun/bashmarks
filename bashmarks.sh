@@ -34,43 +34,41 @@
 
 # setup file to store bookmarks
 if [ ! -n "$SDIRS" ]; then
-    SDIRS=~/.sdirs
+    SDIRS=~/.bashmarks
 fi
 touch $SDIRS
 
 # save current directory to bookmarks
 function s {
-    check_help $1
-    _bookmark_name_valid "$@"
-    if [ -z "$exit_message" ]; then
-        _purge_line "$SDIRS" "export DIR_$1="
-	CURDIR=$(echo $PWD | sed "s#^$HOME#\$HOME#g" | sed "s/ /\ /g")
-        echo "export DIR_$1=\"$CURDIR\"" >> $SDIRS
+    _bashmarks_check_help $@ || _bashmarks_check_name "$@" || _bashmarks_purge_line "$1"
+    if [ $? -eq 1 ]; then
+        echo "export DIR_$1=\"$(echo $PWD | sed -e "s#^$HOME#\$HOME#g" -e "s# #\ #g")\"" >> $SDIRS
     fi
-}
-
-# jump to bookmark
-function g {
-    _bashmarks_check_help $@ || _bashmarks_go $@
-}
-
-# print bookmark
-function p {
-    _bashmarks_check_help $@ || _bashmarks_print $@
 }
 
 # delete bookmark
 function d {
-    _bashmarks_check_help $@ || _bashmarks_delete $@
+    _bashmarks_check_help $@ || _bashmarks_check_name "$@" || _bashmarks_purge_line "$1" || unset "DIR_$1"
+}
+
+# jump to bookmark
+function g {
+    _bashmarks_check_help $@ || cd "$(eval $(echo echo $(echo \$DIR_$1)))"
+}
+
+# print bookmark
+function p {
+    _bashmarks_check_help $@ || echo "$(eval $(echo echo $(echo \$DIR_$1)))"
 }
 
 # list bookmarks with dirname
 function l {
-    _bashmarks_check_help $@ || _bashmarks_list $@
+    _bashmarks_check_help $@ || env | sort | awk '/^DIR_.+/{split(substr($0,5),parts,"="); printf("\033[0;33m%-20s\033[0m %s\n", parts[1], parts[2]);}'
 }
 
 # print out help for the forgetful
 function _bashmarks_check_help {
+    source $SDIRS
     if [ "$1" = "-h" ] || [ "$1" = "-help" ] || [ "$1" = "--help" ] ; then
         echo ''
         echo 's <bookmark_name> - Saves the current directory as "bookmark_name"'
@@ -83,51 +81,8 @@ function _bashmarks_check_help {
     return 1
 }
 
-function _bashmarks_save {
-    _bashmarks_bookmark_name_valid "$@"
-    if [ -z "$_bashmarks_exit_message" ]; then
-        _bashmarks_purge_line "$SDIRS" "export DIR_$1="
-        CURDIR=$(echo $PWD| sed "s#^$HOME#\$HOME#g")
-        echo "export DIR_$1=\"$CURDIR\"" >> $SDIRS
-    fi
-}
-
-function _bashmarks_go {
-    source $SDIRS
-    cd "$(eval $(echo echo $(echo \$DIR_$1)))"
-}
-
-function _bashmarks_print {
-    source $SDIRS
-    echo "$(eval $(echo echo $(echo \$DIR_$1)))"
-}
-
-function _bashmarks_delete {
-    _bashmarks_bookmark_name_valid "$@"
-    if [ -z "$_bashmarks_exit_message" ]; then
-        _bashmarks_purge_line "$SDIRS" "export DIR_$1="
-        unset "DIR_$1"
-    fi
-}
-
-function _bashmarks_list {
-    source $SDIRS
-        
-    # if color output is not working for you, comment out the line below '\033[1;32m' == "red"
-    env | sort | awk '/^DIR_.+/{split(substr($0,5),parts,"="); printf("\033[0;33m%-20s\033[0m %s\n", parts[1], parts[2]);}'
-    
-    # uncomment this line if color output is not working with the line above
-    # env | grep "^DIR_" | cut -c5- | sort |grep "^.*=" 
-}
-
-# list bookmarks without dirname
-function _bashmarks_list_without_dirname {
-    source $SDIRS
-    env | grep --color=never "^DIR_" | cut -c5- | sort | grep --color=never "^.*=" | cut -f1 -d "=" 
-}
-
 # validate bookmark name
-function _bashmarks_bookmark_name_valid {
+function _bashmarks_check_name {
     _bashmarks_exit_message=""
     if [ -z $1 ]; then
         _bashmarks_exit_message="bookmark name required"
@@ -136,52 +91,54 @@ function _bashmarks_bookmark_name_valid {
         _bashmarks_exit_message="bookmark name is not valid"
         echo $_bashmarks_exit_message
     fi
+    [[ -z $_bashmarks_exit_message ]] && return 1 || return 0
+}
+
+# safe delete line from sdirs
+function _bashmarks_purge_line {
+    if [ -s "$SDIRS" ]; then
+        # safely create a temp file
+        t=$(mktemp -t bashmarks.XXXXXX) || exit 1
+        trap "rm -f -- '$t'" EXIT
+
+        # purge line
+        sed "/export DIR_$1=/d" "$SDIRS" > "$t"
+        mv "$t" "$SDIRS"
+
+        # cleanup temp file
+        rm -f -- "$t"
+        trap - EXIT
+        return 1
+    fi
+    return 0
+}
+
+# list bookmarks without dirname
+function _bashmarks_list_without_dirname {
+    source $SDIRS
+    env | grep --color=never "^DIR_" | cut -c5- | sort | grep --color=never "^.*=" | cut -f1 -d "=" 
 }
 
 # completion command
-function bashmarks_comp {
-    local curw
-    COMPREPLY=()
-    curw=${COMP_WORDS[COMP_CWORD]}
+function _bashmarks_comp {
+    local curw=${COMP_WORDS[COMP_CWORD]}
     COMPREPLY=($(compgen -W '`_bashmarks_list_without_dirname`' -- $curw))
     return 0
 }
 
 # ZSH completion command
-function bashmarks_compzsh {
+function _bashmarks_compzsh {
     reply=($(_bashmarks_list_without_dirname))
-}
-
-# safe delete line from sdirs
-function _bashmarks_purge_line {
-    if [ -s "$1" ]; then
-        # safely create a temp file
-        t=$(mktemp -t bashmarks.XXXXXX)
-
-        if [ $? -eq 0 ]; then
-            trap "rm -f -- '$t'" EXIT
-
-            # purge line
-            sed "/$2/d" "$1" > "$t"
-            mv "$t" "$1"
-
-            # cleanup temp file
-            rm -f -- "$t"
-            trap - EXIT
-        else
-            echo "Failed to create temporary file." >&2
-        fi
-    fi
 }
 
 # bind completion command for g,p,d to bashmarks_comp
 if [ $ZSH_VERSION ]; then
-    compctl -K bashmarks_compzsh g
-    compctl -K bashmarks_compzsh p
-    compctl -K bashmarks_compzsh d
+    compctl -K _bashmarks_compzsh g
+    compctl -K _bashmarks_compzsh p
+    compctl -K _bashmarks_compzsh d
 else
     shopt -s progcomp
-    complete -F bashmarks_comp g
-    complete -F bashmarks_comp p
-    complete -F bashmarks_comp d
+    complete -F _bashmarks_comp g
+    complete -F _bashmarks_comp p
+    complete -F _bashmarks_comp d
 fi
