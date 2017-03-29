@@ -83,15 +83,13 @@ function _bashmarks_check_help {
 
 # validate bookmark name
 function _bashmarks_check_name {
-    _bashmarks_exit_message=""
+    local error_message=""
     if [ -z $1 ]; then
-        _bashmarks_exit_message="bookmark name required"
-        echo $_bashmarks_exit_message
+        error_message="bookmark name required"
     elif [ "$1" != "$(echo $1 | sed 's/[^A-Za-z0-9_]//g')" ]; then
-        _bashmarks_exit_message="bookmark name is not valid"
-        echo $_bashmarks_exit_message
+        error_message="bookmark name is not valid"
     fi
-    [[ -z $_bashmarks_exit_message ]] && return 1 || return 0
+    [[ -z $error_message ]] && return 1 || echo $error_message; return 0
 }
 
 # safe delete line from sdirs
