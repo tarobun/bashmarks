@@ -2,7 +2,7 @@
 
 ## Install
 
-1. git clone git://github.com/huyng/bashmarks.git
+1. git clone git://github.com/tarobun/bashmarks.git
 2. cd bashmarks
 3. make install
 4. source **~/.local/bin/bashmarks.sh** from within your **~.bash\_profile** or **~/.bashrc** file
@@ -27,4 +27,4 @@
 
 ## Where Bashmarks are stored
     
-All of your directory bookmarks are saved in a file called ".sdirs" in your HOME directory.
+All of your directory bookmarks are saved in a file called ".bashmarks" in your HOME directory.
